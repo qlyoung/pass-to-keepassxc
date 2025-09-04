@@ -67,7 +67,6 @@ class KeepassXCEntry:
         self.add_string_field('URL', url)
         self.add_string_field('Title', title)
         self.add_auto_type()
-        
 
     def __str__(self):
         return ET.tostring(self.root, encoding='utf-8')
@@ -140,9 +139,21 @@ class KeepassXCGroup:
 
 def parse_pass_format(src: str):
     it = src.split('\n')
+
     password = it[0]
+    url = ""
+    username = ""
+    notes = ""
+
+    for line in it:
+        if line.startswith("url:"):
+            url = line.split(":", maxsplit=1)[1].strip()
+        elif line.startswith("login:"):
+            username = line.split(":", maxsplit=1)[1].strip()
+
+    # keep everything in the notes just to be sure we don't lose any data
     notes = '\n'.join(it[1:])
-    return (password, notes)
+    return (password, username, url, notes)
 
 
 def find_files(directory: Path):
@@ -167,15 +178,15 @@ if __name__ == '__main__':
     for group in (x for x in password_store_dir.iterdir() if x.is_dir() and x.name[0] != '.'):
         keepassxc_entries: List[KeepassXCEntry] = []
         for entry in find_files(group):
-            url = f"https://{entry.parent.name}"
-            username = re.split(r'\..*?$', entry.name)[0]
+            filename_without_suffix = re.split(r'\..*?$', entry.name)[0]
             try:
                 file_contents = decrypt(entry)
             except UnicodeDecodeError:
                 # not UTF-8; skip it
+                print("UNICODE ERROR: SKIPPING %s", entry)
                 continue
-            password, notes = parse_pass_format(file_contents)
-            keepassxc_entries.append(KeepassXCEntry(username=username, password=password, url=url, title=username, notes=notes))
+            password, username, url, notes = parse_pass_format(file_contents)
+            keepassxc_entries.append(KeepassXCEntry(username=username, password=password, url=url, title=filename_without_suffix, notes=notes))
         out.add_group(group.name, keepassxc_entries)
     print(out)
     sys.exit(0)
